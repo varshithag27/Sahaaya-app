@@ -1,5 +1,14 @@
+// SahaayaApp.js - YOUR MAIN FILE
 import React, { useState } from 'react';
-import { Heart, Bell, Phone, Settings, Home, Calendar, User, AlertCircle, Plus, ChevronRight, Activity, Shield } from 'lucide-react';
+import { Heart, Bell, Phone, Settings, Calendar, User, AlertCircle, Plus, ChevronRight, Activity, Shield, Fingerprint } from 'lucide-react';
+
+// IMPORT ALL YOUR NEW FILES HERE
+import { translations } from './pages/translations';
+import { validatePhone, validateOTP } from './pages/validation';
+import AddMedicationForm from './pages/AddMedicationForm';
+import AddContactForm from './pages/AddContactForm';
+import AppointmentsScreen from './pages/AppointmentsScreen';
+import ProfileScreen from './pages/ProfileScreen';
 
 // Mock Authentication Context
 const AuthContext = React.createContext();
@@ -20,7 +29,7 @@ const colors = {
   accent: '#FDCB6E'
 };
 
-// Animated Card Component
+// Animated Card Component (same as before)
 const AnimatedCard = ({ children, style, onClick, gradient }) => {
   const [isHovered, setIsHovered] = useState(false);
   
@@ -47,24 +56,44 @@ const AnimatedCard = ({ children, style, onClick, gradient }) => {
   );
 };
 
-// Login Screen
-const LoginScreen = ({ onLogin }) => {
+// UPDATED Login Screen with Biometric and Validation
+const LoginScreen = ({ onLogin, language, onLanguageChange }) => {
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState('');
   const [otpSent, setOtpSent] = useState(false);
+  const [phoneError, setPhoneError] = useState('');
+  const [otpError, setOtpError] = useState('');
+  const [biometricEnabled, setBiometricEnabled] = useState(false);
+
+  const t = translations[language];
 
   const handleSendOTP = () => {
-    if (phone.length === 10) {
+    const validation = validatePhone(phone);
+    if (validation.valid) {
       setOtpSent(true);
-      // Simulate OTP send
+      setPhoneError('');
       setTimeout(() => alert('✅ OTP sent successfully!'), 300);
+    } else {
+      setPhoneError(validation.error);
     }
   };
 
   const handleLogin = () => {
-    if (otp.length === 6) {
-      onLogin({ name: 'User', phone });
+    const validation = validateOTP(otp);
+    if (validation.valid) {
+      setBiometricEnabled(true);
+      setOtpError('');
+      onLogin({ name: 'User', phone, biometricEnabled: true });
+    } else {
+      setOtpError(validation.error);
     }
+  };
+
+  const handleBiometricLogin = () => {
+    setTimeout(() => {
+      alert('✅ Biometric authentication successful!');
+      onLogin({ name: 'User', phone: '9876543210', biometricEnabled: true });
+    }, 500);
   };
 
   return (
@@ -78,7 +107,6 @@ const LoginScreen = ({ onLogin }) => {
       position: 'relative',
       overflow: 'hidden'
     }}>
-      {/* Animated Background Circles */}
       <div style={{
         position: 'absolute',
         top: '-100px',
@@ -101,6 +129,40 @@ const LoginScreen = ({ onLogin }) => {
       }} />
 
       <AnimatedCard style={{ maxWidth: '420px', width: '100%', position: 'relative', zIndex: 1 }}>
+        {/* Language Selector */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '20px', gap: '8px' }}>
+          <button
+            onClick={() => onLanguageChange('en')}
+            style={{
+              padding: '8px 16px',
+              borderRadius: '12px',
+              border: '2px solid',
+              borderColor: language === 'en' ? colors.primary : '#E8E8E8',
+              background: language === 'en' ? colors.primary : 'white',
+              color: language === 'en' ? 'white' : colors.text,
+              cursor: 'pointer',
+              fontWeight: '600'
+            }}
+          >
+            English
+          </button>
+          <button
+            onClick={() => onLanguageChange('kn')}
+            style={{
+              padding: '8px 16px',
+              borderRadius: '12px',
+              border: '2px solid',
+              borderColor: language === 'kn' ? colors.primary : '#E8E8E8',
+              background: language === 'kn' ? colors.primary : 'white',
+              color: language === 'kn' ? 'white' : colors.text,
+              cursor: 'pointer',
+              fontWeight: '600'
+            }}
+          >
+            ಕನ್ನಡ
+          </button>
+        </div>
+
         <div style={{ textAlign: 'center', marginBottom: '40px' }}>
           <div style={{
             background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
@@ -122,41 +184,58 @@ const LoginScreen = ({ onLogin }) => {
             WebkitTextFillColor: 'transparent',
             margin: '0 0 10px 0',
             fontWeight: 'bold'
-          }}>Sahaaya</h1>
-          <p style={{ fontSize: '18px', color: colors.textLight }}>Your Healthcare Companion</p>
+          }}>{t.appName}</h1>
+          <p style={{ fontSize: '18px', color: colors.textLight }}>{t.tagline}</p>
         </div>
 
         {!otpSent ? (
           <div>
-            <label style={{ 
-              fontSize: '18px', 
-              color: colors.text, 
-              display: 'block', 
-              marginBottom: '12px',
-              fontWeight: '600'
-            }}>
-              📱 Phone Number
+            {/* Biometric Login Option */}
+            {biometricEnabled && (
+              <div style={{ marginBottom: '32px' }}>
+                <AnimatedCard 
+                  gradient="linear-gradient(135deg, #00b894 0%, #55efc4 100%)"
+                  onClick={handleBiometricLogin}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', padding: '8px' }}>
+                    <Fingerprint size={32} color="white" />
+                    <span style={{ fontSize: '20px', color: 'white', fontWeight: 'bold' }}>
+                      {t.useBiometric}
+                    </span>
+                  </div>
+                </AnimatedCard>
+                <div style={{ textAlign: 'center', margin: '20px 0', color: colors.textLight, fontSize: '16px', fontWeight: '600' }}>
+                  OR
+                </div>
+              </div>
+            )}
+
+            <label style={{ fontSize: '18px', color: colors.text, display: 'block', marginBottom: '12px', fontWeight: '600' }}>
+              {t.phoneLabel}
             </label>
             <input
               type="tel"
               value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="Enter 10-digit number"
+              onChange={(e) => {
+                const value = e.target.value.replace(/\D/g, '');
+                setPhone(value);
+                if (phoneError) setPhoneError('');
+              }}
+              placeholder={t.phonePlaceholder}
               maxLength="10"
               style={{
                 width: '100%',
                 padding: '18px',
                 fontSize: '20px',
-                border: '2px solid #E8E8E8',
+                border: `2px solid ${phoneError ? colors.danger : '#E8E8E8'}`,
                 borderRadius: '16px',
-                marginBottom: '24px',
+                marginBottom: '8px',
                 boxSizing: 'border-box',
-                transition: 'all 0.3s',
                 outline: 'none'
               }}
-              onFocus={(e) => e.target.style.borderColor = colors.primary}
-              onBlur={(e) => e.target.style.borderColor = '#E8E8E8'}
             />
+            {phoneError && <p style={{ color: colors.danger, fontSize: '14px', margin: '0 0 16px 0' }}>{phoneError}</p>}
+            
             <button
               onClick={handleSendOTP}
               style={{
@@ -169,47 +248,43 @@ const LoginScreen = ({ onLogin }) => {
                 borderRadius: '16px',
                 cursor: 'pointer',
                 fontWeight: 'bold',
-                transition: 'transform 0.2s',
+                marginTop: phoneError ? '0' : '16px',
                 boxShadow: '0 10px 25px rgba(102, 126, 234, 0.4)'
               }}
-              onMouseEnter={(e) => e.target.style.transform = 'scale(1.02)'}
-              onMouseLeave={(e) => e.target.style.transform = 'scale(1)'}
             >
-              Send OTP 🚀
+              {t.sendOTP}
             </button>
           </div>
         ) : (
           <div>
-            <label style={{ 
-              fontSize: '18px', 
-              color: colors.text, 
-              display: 'block', 
-              marginBottom: '12px',
-              fontWeight: '600'
-            }}>
-              🔐 Enter OTP
+            <label style={{ fontSize: '18px', color: colors.text, display: 'block', marginBottom: '12px', fontWeight: '600' }}>
+              {t.otpLabel}
             </label>
             <input
               type="text"
               value={otp}
-              onChange={(e) => setOtp(e.target.value)}
-              placeholder="Enter 6-digit OTP"
+              onChange={(e) => {
+                const value = e.target.value.replace(/\D/g, '');
+                setOtp(value);
+                if (otpError) setOtpError('');
+              }}
+              placeholder={t.otpPlaceholder}
               maxLength="6"
               style={{
                 width: '100%',
                 padding: '18px',
                 fontSize: '24px',
-                border: '2px solid #E8E8E8',
+                border: `2px solid ${otpError ? colors.danger : '#E8E8E8'}`,
                 borderRadius: '16px',
-                marginBottom: '24px',
+                marginBottom: '8px',
                 boxSizing: 'border-box',
                 letterSpacing: '8px',
                 textAlign: 'center',
                 outline: 'none'
               }}
-              onFocus={(e) => e.target.style.borderColor = colors.secondary}
-              onBlur={(e) => e.target.style.borderColor = '#E8E8E8'}
             />
+            {otpError && <p style={{ color: colors.danger, fontSize: '14px', margin: '0 0 16px 0' }}>{otpError}</p>}
+            
             <button
               onClick={handleLogin}
               style={{
@@ -222,14 +297,19 @@ const LoginScreen = ({ onLogin }) => {
                 borderRadius: '16px',
                 cursor: 'pointer',
                 fontWeight: 'bold',
+                marginTop: otpError ? '0' : '16px',
                 marginBottom: '12px',
                 boxShadow: '0 10px 25px rgba(0, 184, 148, 0.4)'
               }}
             >
-              Login ✅
+              {t.login}
             </button>
             <button
-              onClick={() => setOtpSent(false)}
+              onClick={() => {
+                setOtpSent(false);
+                setOtp('');
+                setOtpError('');
+              }}
               style={{
                 width: '100%',
                 padding: '14px',
@@ -240,7 +320,7 @@ const LoginScreen = ({ onLogin }) => {
                 cursor: 'pointer'
               }}
             >
-              ← Change Number
+              {t.changeNumber}
             </button>
           </div>
         )}
@@ -262,25 +342,19 @@ const LoginScreen = ({ onLogin }) => {
   );
 };
 
-// Home Screen
-const HomeScreen = ({ onNavigate }) => {
-  const [time] = useState(new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }));
+// Home Screen (same as before)
+const HomeScreen = ({ onNavigate, language }) => {
+  const t = translations[language];
   
   const menuItems = [
-    { id: 'medications', icon: Bell, label: 'Medications', gradient: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', iconColor: '#fff' },
-    { id: 'emergency', icon: Phone, label: 'Emergency', gradient: 'linear-gradient(135deg, #00b894 0%, #55efc4 100%)', iconColor: '#fff' },
-    { id: 'appointments', icon: Calendar, label: 'Appointments', gradient: 'linear-gradient(135deg, #fdcb6e 0%, #e17055 100%)', iconColor: '#fff' },
-    { id: 'profile', icon: User, label: 'Profile', gradient: 'linear-gradient(135deg, #fd79a8 0%, #a29bfe 100%)', iconColor: '#fff' }
+    { id: 'medications', icon: Bell, label: t.medications, gradient: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', iconColor: '#fff' },
+    { id: 'emergency', icon: Phone, label: t.emergency, gradient: 'linear-gradient(135deg, #00b894 0%, #55efc4 100%)', iconColor: '#fff' },
+    { id: 'appointments', icon: Calendar, label: t.appointments, gradient: 'linear-gradient(135deg, #fdcb6e 0%, #e17055 100%)', iconColor: '#fff' },
+    { id: 'profile', icon: User, label: t.profile, gradient: 'linear-gradient(135deg, #fd79a8 0%, #a29bfe 100%)', iconColor: '#fff' }
   ];
 
   return (
-    <div style={{ 
-      minHeight: '100vh', 
-      background: '#F8F9FA',
-      padding: '24px',
-      paddingBottom: '100px'
-    }}>
-      {/* Header with Stats */}
+    <div style={{ minHeight: '100vh', background: '#F8F9FA', padding: '24px', paddingBottom: '100px' }}>
       <div style={{
         background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
         borderRadius: '28px',
@@ -292,36 +366,20 @@ const HomeScreen = ({ onNavigate }) => {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
           <div>
             <p style={{ fontSize: '16px', opacity: 0.9, margin: 0 }}>{new Date().toDateString()}</p>
-            <h1 style={{ fontSize: '32px', margin: '8px 0 0 0', fontWeight: 'bold' }}>Good Morning! 👋</h1>
+            <h1 style={{ fontSize: '32px', margin: '8px 0 0 0', fontWeight: 'bold' }}>{t.goodMorning}</h1>
           </div>
-          <div style={{
-            background: 'rgba(255,255,255,0.2)',
-            borderRadius: '16px',
-            padding: '12px 16px'
-          }}>
+          <div style={{ background: 'rgba(255,255,255,0.2)', borderRadius: '16px', padding: '12px 16px' }}>
             <Settings size={28} style={{ cursor: 'pointer' }} />
           </div>
         </div>
         
         <div style={{ display: 'flex', gap: '16px', marginTop: '24px' }}>
-          <div style={{ 
-            flex: 1, 
-            background: 'rgba(255,255,255,0.15)', 
-            borderRadius: '16px', 
-            padding: '16px',
-            backdropFilter: 'blur(10px)'
-          }}>
+          <div style={{ flex: 1, background: 'rgba(255,255,255,0.15)', borderRadius: '16px', padding: '16px', backdropFilter: 'blur(10px)' }}>
             <Activity size={24} style={{ marginBottom: '8px' }} />
             <p style={{ fontSize: '24px', fontWeight: 'bold', margin: '4px 0' }}>3</p>
             <p style={{ fontSize: '14px', opacity: 0.9, margin: 0 }}>Medications Today</p>
           </div>
-          <div style={{ 
-            flex: 1, 
-            background: 'rgba(255,255,255,0.15)', 
-            borderRadius: '16px', 
-            padding: '16px',
-            backdropFilter: 'blur(10px)'
-          }}>
+          <div style={{ flex: 1, background: 'rgba(255,255,255,0.15)', borderRadius: '16px', padding: '16px', backdropFilter: 'blur(10px)' }}>
             <Shield size={24} style={{ marginBottom: '8px' }} />
             <p style={{ fontSize: '24px', fontWeight: 'bold', margin: '4px 0' }}>Safe</p>
             <p style={{ fontSize: '14px', opacity: 0.9, margin: 0 }}>All Systems OK</p>
@@ -329,7 +387,6 @@ const HomeScreen = ({ onNavigate }) => {
         </div>
       </div>
 
-      {/* SOS Emergency Button - Pulsing */}
       <AnimatedCard
         gradient="linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%)"
         onClick={() => {
@@ -348,14 +405,7 @@ const HomeScreen = ({ onNavigate }) => {
           background: 'rgba(255,255,255,0.1)',
           animation: 'pulse-ring 2s ease-out infinite'
         }} />
-        <div style={{ 
-          display: 'flex', 
-          alignItems: 'center', 
-          justifyContent: 'center',
-          gap: '20px',
-          position: 'relative',
-          zIndex: 1
-        }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '20px', position: 'relative', zIndex: 1 }}>
           <div style={{
             background: 'rgba(255,255,255,0.3)',
             borderRadius: '50%',
@@ -377,28 +427,14 @@ const HomeScreen = ({ onNavigate }) => {
         </div>
       </AnimatedCard>
 
-      {/* Menu Grid */}
       <h3 style={{ fontSize: '22px', color: colors.text, marginBottom: '20px', fontWeight: 'bold' }}>
         Quick Access
       </h3>
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(2, 1fr)',
-        gap: '20px'
-      }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '20px' }}>
         {menuItems.map(item => (
-          <AnimatedCard
-            key={item.id}
-            gradient={item.gradient}
-            onClick={() => onNavigate(item.id)}
-          >
+          <AnimatedCard key={item.id} gradient={item.gradient} onClick={() => onNavigate(item.id)}>
             <item.icon size={48} color={item.iconColor} style={{ marginBottom: '16px' }} />
-            <p style={{ 
-              fontSize: '20px', 
-              color: item.iconColor, 
-              fontWeight: 'bold', 
-              margin: '0 0 8px 0' 
-            }}>
+            <p style={{ fontSize: '20px', color: item.iconColor, fontWeight: 'bold', margin: '0 0 8px 0' }}>
               {item.label}
             </p>
             <ChevronRight size={24} color={item.iconColor} style={{ opacity: 0.7 }} />
@@ -409,14 +445,8 @@ const HomeScreen = ({ onNavigate }) => {
       <style>
         {`
           @keyframes pulse-ring {
-            0% {
-              transform: scale(1);
-              opacity: 1;
-            }
-            100% {
-              transform: scale(1.5);
-              opacity: 0;
-            }
+            0% { transform: scale(1); opacity: 1; }
+            100% { transform: scale(1.5); opacity: 0; }
           }
         `}
       </style>
@@ -424,31 +454,48 @@ const HomeScreen = ({ onNavigate }) => {
   );
 };
 
-// Medications Screen
+// UPDATED Medications Screen with Add Form
 const MedicationsScreen = ({ onBack }) => {
-  const [medications] = useState([
+  const [medications, setMedications] = useState([
     { id: 1, name: 'Aspirin', dosage: '100mg', time: '8:00 AM', frequency: 'Daily', taken: true, color: '#667eea' },
     { id: 2, name: 'Metformin', dosage: '500mg', time: '2:00 PM', frequency: 'Daily', taken: false, color: '#00b894' },
     { id: 3, name: 'Vitamin D', dosage: '1000 IU', time: '9:00 PM', frequency: 'Daily', taken: false, color: '#fdcb6e' }
   ]);
+  const [showAddModal, setShowAddModal] = useState(false);
+
+  const markTaken = (id) => {
+    setMedications(medications.map(med => 
+      med.id === id ? { ...med, taken: true } : med
+    ));
+    alert('✅ Medication marked as taken!');
+  };
+
+  const addMedication = (formData) => {
+    const colors = ['#667eea', '#00b894', '#fdcb6e', '#fd79a8'];
+    const newMedication = {
+      id: medications.length + 1,
+      ...formData,
+      taken: false,
+      color: colors[Math.floor(Math.random() * colors.length)]
+    };
+    setMedications([...medications, newMedication]);
+    alert('✅ Medication added successfully!');
+  };
 
   return (
     <div style={{ minHeight: '100vh', background: '#F8F9FA', padding: '24px', paddingBottom: '100px' }}>
-      <button
-        onClick={onBack}
-        style={{
-          fontSize: '18px',
-          color: colors.primary,
-          background: 'white',
-          border: 'none',
-          cursor: 'pointer',
-          marginBottom: '24px',
-          padding: '12px 20px',
-          borderRadius: '12px',
-          fontWeight: '600',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.08)'
-        }}
-      >
+      <button onClick={onBack} style={{
+        fontSize: '18px',
+        color: colors.primary,
+        background: 'white',
+        border: 'none',
+        cursor: 'pointer',
+        marginBottom: '24px',
+        padding: '12px 20px',
+        borderRadius: '12px',
+        fontWeight: '600',
+        boxShadow: '0 4px 12px rgba(0,0,0,0.08)'
+      }}>
         ← Back
       </button>
       
@@ -459,7 +506,7 @@ const MedicationsScreen = ({ onBack }) => {
         Stay on track with your health routine
       </p>
 
-      {medications.map((med, index) => (
+      {medications.map((med) => (
         <AnimatedCard key={med.id} style={{
           marginBottom: '16px',
           borderLeft: `6px solid ${med.color}`,
@@ -495,16 +542,19 @@ const MedicationsScreen = ({ onBack }) => {
               </p>
             </div>
             {!med.taken && (
-              <button style={{
-                background: med.color,
-                color: 'white',
-                border: 'none',
-                borderRadius: '12px',
-                padding: '12px 24px',
-                fontSize: '16px',
-                fontWeight: 'bold',
-                cursor: 'pointer'
-              }}>
+              <button 
+                onClick={() => markTaken(med.id)}
+                style={{
+                  background: med.color,
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '12px',
+                  padding: '12px 24px',
+                  fontSize: '16px',
+                  fontWeight: 'bold',
+                  cursor: 'pointer'
+                }}
+              >
                 Mark Taken
               </button>
             )}
@@ -512,7 +562,7 @@ const MedicationsScreen = ({ onBack }) => {
         </AnimatedCard>
       ))}
 
-      <AnimatedCard gradient="linear-gradient(135deg, #667eea 0%, #764ba2 100%)" onClick={() => alert('Add medication feature coming soon!')} style={{ marginTop: '24px' }}>
+      <AnimatedCard gradient="linear-gradient(135deg, #667eea 0%, #764ba2 100%)" onClick={() => setShowAddModal(true)} style={{ marginTop: '24px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
           <Plus size={28} color="white" />
           <span style={{ fontSize: '20px', color: 'white', fontWeight: 'bold' }}>
@@ -520,40 +570,54 @@ const MedicationsScreen = ({ onBack }) => {
           </span>
         </div>
       </AnimatedCard>
+
+      {/* USE THE IMPORTED ADD FORM */}
+      <AddMedicationForm 
+        isOpen={showAddModal} 
+        onClose={() => setShowAddModal(false)} 
+        onAdd={addMedication}
+      />
     </div>
   );
 };
 
-// Emergency Contacts Screen
+// UPDATED Emergency Contacts Screen with Add Form
 const EmergencyContactsScreen = ({ onBack }) => {
-  const [contacts] = useState([
+  const [contacts, setContacts] = useState([
     { id: 1, name: 'Dr. Sharma', relation: 'Primary Doctor', phone: '+91 98765 43210', avatar: '👨‍⚕️', color: '#667eea' },
     { id: 2, name: 'Rajesh Kumar', relation: 'Son', phone: '+91 98765 43211', avatar: '👨', color: '#00b894' },
     { id: 3, name: 'Priya Devi', relation: 'Daughter', phone: '+91 98765 43212', avatar: '👩', color: '#fd79a8' }
   ]);
+  const [showAddModal, setShowAddModal] = useState(false);
+
+  const addContact = (formData) => {
+    const newContact = {
+      id: contacts.length + 1,
+      ...formData
+    };
+    setContacts([...contacts, newContact]);
+    alert('✅ Contact added successfully!');
+  };
 
   return (
     <div style={{ minHeight: '100vh', background: '#F8F9FA', padding: '24px', paddingBottom: '100px' }}>
-      <button
-        onClick={onBack}
-        style={{
-          fontSize: '18px',
-          color: colors.primary,
-          background: 'white',
-          border: 'none',
-          cursor: 'pointer',
-          marginBottom: '24px',
-          padding: '12px 20px',
-          borderRadius: '12px',
-          fontWeight: '600',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.08)'
-        }}
-      >
+      <button onClick={onBack} style={{
+        fontSize: '18px',
+        color: colors.primary,
+        background: 'white',
+        border: 'none',
+        cursor: 'pointer',
+        marginBottom: '24px',
+        padding: '12px 20px',
+        borderRadius: '12px',
+        fontWeight: '600',
+        boxShadow: '0 4px 12px rgba(0,0,0,0.08)'
+      }}>
         ← Back
       </button>
       
       <h1 style={{ fontSize: '32px', color: colors.text, marginBottom: '12px', fontWeight: 'bold' }}>
-        📞 Emergency Contacts
+        📞📞 Emergency Contacts
       </h1>
       <p style={{ fontSize: '16px', color: colors.textLight, marginBottom: '28px' }}>
         Your trusted support network
@@ -608,7 +672,7 @@ const EmergencyContactsScreen = ({ onBack }) => {
         </AnimatedCard>
       ))}
 
-      <AnimatedCard gradient="linear-gradient(135deg, #00b894 0%, #55efc4 100%)" onClick={() => alert('Add contact feature coming soon!')} style={{ marginTop: '24px' }}>
+      <AnimatedCard gradient="linear-gradient(135deg, #00b894 0%, #55efc4 100%)" onClick={() => setShowAddModal(true)} style={{ marginTop: '24px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
           <Plus size={28} color="white" />
           <span style={{ fontSize: '20px', color: 'white', fontWeight: 'bold' }}>
@@ -616,6 +680,13 @@ const EmergencyContactsScreen = ({ onBack }) => {
           </span>
         </div>
       </AnimatedCard>
+
+      {/* USE THE IMPORTED ADD CONTACT FORM */}
+      <AddContactForm 
+        isOpen={showAddModal} 
+        onClose={() => setShowAddModal(false)} 
+        onAdd={addContact}
+      />
     </div>
   );
 };
@@ -625,10 +696,15 @@ const SahaayaApp = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [currentScreen, setCurrentScreen] = useState('home');
   const [user, setUser] = useState(null);
+  const [language, setLanguage] = useState('en');
 
   const handleLogin = (userData) => {
     setUser(userData);
     setIsAuthenticated(true);
+  };
+
+  const handleLanguageChange = (lang) => {
+    setLanguage(lang);
   };
 
   const handleNavigate = (screen) => {
@@ -640,28 +716,17 @@ const SahaayaApp = () => {
   };
 
   if (!isAuthenticated) {
-    return <LoginScreen onLogin={handleLogin} />;
+    return <LoginScreen onLogin={handleLogin} language={language} onLanguageChange={handleLanguageChange} />;
   }
 
   return (
     <AuthContext.Provider value={{ user }}>
-      {currentScreen === 'home' && <HomeScreen onNavigate={handleNavigate} />}
+      {currentScreen === 'home' && <HomeScreen onNavigate={handleNavigate} language={language} />}
       {currentScreen === 'medications' && <MedicationsScreen onBack={handleBack} />}
       {currentScreen === 'emergency' && <EmergencyContactsScreen onBack={handleBack} />}
-      {currentScreen === 'appointments' && (
-        <div style={{ minHeight: '100vh', background: '#F8F9FA', padding: '24px' }}>
-          <button onClick={handleBack} style={{ fontSize: '18px', color: colors.primary, background: 'white', border: 'none', cursor: 'pointer', padding: '12px 20px', borderRadius: '12px', fontWeight: '600', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}>← Back</button>
-          <h1 style={{ fontSize: '32px', color: colors.text, marginTop: '24px', fontWeight: 'bold' }}>📅 Appointments</h1>
-          <p style={{ fontSize: '18px', color: colors.textLight, marginTop: '12px' }}>Coming Soon...</p>
-        </div>
-      )}
-      {currentScreen === 'profile' && (
-        <div style={{ minHeight: '100vh', background: '#F8F9FA', padding: '24px' }}>
-          <button onClick={handleBack} style={{ fontSize: '18px', color: colors.primary, background: 'white', border: 'none', cursor: 'pointer', padding: '12px 20px', borderRadius: '12px', fontWeight: '600', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}>← Back</button>
-          <h1 style={{ fontSize: '32px', color: colors.text, marginTop: '24px', fontWeight: 'bold' }}>👤 My Profile</h1>
-          <p style={{ fontSize: '18px', color: colors.textLight, marginTop: '12px' }}>Coming Soon...</p>
-        </div>
-      )}
+      {/* USE IMPORTED SCREENS */}
+      {currentScreen === 'appointments' && <AppointmentsScreen onBack={handleBack} />}
+      {currentScreen === 'profile' && <ProfileScreen onBack={handleBack} user={user} />}
     </AuthContext.Provider>
   );
 };
