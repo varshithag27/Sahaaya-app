@@ -1,11 +1,7 @@
-// LoginScreen.js - UPDATED WITH REAL OTP
-import React, { useState } from 'react';
-import { Heart, Fingerprint } from 'lucide-react';
-import { auth } from './firebaseConfig';
-import { RecaptchaVerifier, signInWithPhoneNumber } from 'firebase/auth';
-import { translations } from './translations';
-import { validatePhone, validateOTP } from './validation';
-
+import React, { useState, useEffect } from 'react';
+import { Heart, AlertCircle, CheckCircle, X } from 'lucide-react';
+import authService from '../services/authService';
+import translations from './translations';
 const colors = {
   primary: '#6C5CE7',
   secondary: '#00B894',
@@ -16,141 +12,177 @@ const colors = {
   textLight: '#636E72',
 };
 
-const AnimatedCard = ({ children, style, onClick, gradient }) => {
-  const [isHovered, setIsHovered] = useState(false);
-  
+// Toast Component
+const Toast = ({ message, type, onClose }) => {
+  const bgColor = type === 'success' ? colors.secondary : type === 'error' ? colors.danger : '#FFA502';
+  const Icon = type === 'success' ? CheckCircle : AlertCircle;
+
+  useEffect(() => {
+    const timer = setTimeout(onClose, 4000);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
   return (
-    <div
-      onClick={onClick}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      style={{
-        background: gradient || colors.cardBg,
-        borderRadius: '24px',
-        padding: '24px',
-        cursor: onClick ? 'pointer' : 'default',
-        boxShadow: isHovered 
-          ? '0 20px 40px rgba(0,0,0,0.15)' 
-          : '0 10px 30px rgba(0,0,0,0.1)',
-        transform: isHovered ? 'translateY(-8px)' : 'translateY(0)',
-        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-        ...style
-      }}
-    >
-      {children}
+    <div style={{
+      position: 'fixed',
+      top: '20px',
+      right: '20px',
+      background: bgColor,
+      color: 'white',
+      padding: '16px 24px',
+      borderRadius: '12px',
+      boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '12px',
+      zIndex: 1000,
+      animation: 'slideIn 0.3s ease-out',
+      minWidth: '300px',
+      maxWidth: '500px'
+    }}>
+      <Icon size={24} />
+      <span style={{ flex: 1, fontSize: '15px', fontWeight: '500' }}>{message}</span>
+      <X size={20} onClick={onClose} style={{ cursor: 'pointer' }} />
+      <style>{`
+        @keyframes slideIn {
+          from { transform: translateX(400px); opacity: 0; }
+          to { transform: translateX(0); opacity: 1; }
+        }
+      `}</style>
     </div>
   );
 };
 
-const LoginScreen = ({ onLogin, language, onLanguageChange }) => {
+const LoginScreen = ({ onLogin, language = 'en' }) => {
   const [phone, setPhone] = useState('');
-  const [otp, setOtp] = useState('');
+  const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [otpSent, setOtpSent] = useState(false);
-  const [phoneError, setPhoneError] = useState('');
-  const [otpError, setOtpError] = useState('');
-  const [confirmationResult, setConfirmationResult] = useState(null);
+  const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
-  const [biometricEnabled, setBiometricEnabled] = useState(
-    localStorage.getItem('biometricEnabled') === 'true'
-  );
-
+  const [toast, setToast] = useState(null);
+  
   const t = translations[language];
 
-  // Setup reCAPTCHA
-  const setupRecaptcha = () => {
-    if (!window.recaptchaVerifier) {
-      window.recaptchaVerifier = new RecaptchaVerifier(
-        auth,
-        'recaptcha-container',
-        {
-          size: 'invisible',
-          callback: (response) => {
-            console.log('reCAPTCHA solved');
-          },
-          'expired-callback': () => {
-            console.log('reCAPTCHA expired');
-          }
-        }
-      );
+  const showToast = (message, type) => {
+    setToast({ message, type });
+  };
+
+  // Phone validation
+  const validatePhone = (phoneNumber) => {
+    if (!phoneNumber) return 'Phone number is required';
+    if (phoneNumber.length !== 10) return 'Phone number must be 10 digits';
+    if (!/^\d+$/.test(phoneNumber)) return 'Phone number must contain only digits';
+    if (!['6', '7', '8', '9'].includes(phoneNumber[0])) return 'Phone number must start with 6, 7, 8, or 9';
+    return null;
+  };
+
+  const handlePhoneChange = (e) => {
+    const value = e.target.value.replace(/\D/g, '');
+    if (value.length <= 10) {
+      setPhone(value);
+      if (errors.phone) setErrors({ ...errors, phone: null });
+    }
+  };
+
+  const handleOtpChange = (index, value) => {
+    if (!/^\d*$/.test(value)) return;
+    const newOtp = [...otp];
+    newOtp[index] = value;
+    setOtp(newOtp);
+    if (value && index < 5) {
+      document.getElementById(`otp-${index + 1}`)?.focus();
+    }
+    if (errors.otp) setErrors({ ...errors, otp: null });
+  };
+
+  const handleOtpKeyDown = (index, e) => {
+    if (e.key === 'Backspace' && !otp[index] && index > 0) {
+      document.getElementById(`otp-${index - 1}`)?.focus();
     }
   };
 
   const handleSendOTP = async () => {
-    const validation = validatePhone(phone);
-    if (!validation.valid) {
-      setPhoneError(validation.error);
+    const phoneError = validatePhone(phone);
+    if (phoneError) {
+      setErrors({ phone: phoneError });
+      showToast(phoneError, 'error');
       return;
     }
 
     setLoading(true);
-    setPhoneError('');
-
+    
     try {
-      setupRecaptcha();
-      const appVerifier = window.recaptchaVerifier;
+      // Call Firebase auth service
+      const result = await authService.sendOTP(phone);
       
-      // Format phone number with country code
-      const phoneNumber = `+91${phone}`;
-      
-      const confirmation = await signInWithPhoneNumber(auth, phoneNumber, appVerifier);
-      setConfirmationResult(confirmation);
-      setOtpSent(true);
-      alert('✅ OTP sent successfully to your phone!');
-    } catch (error) {
-      console.error('Error sending OTP:', error);
-      if (error.code === 'auth/too-many-requests') {
-        setPhoneError('Too many requests. Please try again later.');
-      } else if (error.code === 'auth/invalid-phone-number') {
-        setPhoneError('Invalid phone number format.');
+      if (result.success) {
+        setOtpSent(true);
+        showToast(`✅ OTP sent to +91-${phone}`, 'success');
+        setTimeout(() => document.getElementById('otp-0')?.focus(), 100);
       } else {
-        setPhoneError('Failed to send OTP. Please try again.');
+        showToast(`❌ ${result.message}`, 'error');
       }
+    } catch (error) {
+      showToast('❌ Failed to send OTP. Please try again.', 'error');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleVerifyOTP = async () => {
-    const validation = validateOTP(otp);
-    if (!validation.valid) {
-      setOtpError(validation.error);
+  const handleLogin = async () => {
+    const otpValue = otp.join('');
+    if (otpValue.length !== 6) {
+      setErrors({ otp: 'Please enter complete 6-digit OTP' });
+      showToast('Please enter complete 6-digit OTP', 'error');
       return;
     }
 
     setLoading(true);
-    setOtpError('');
 
     try {
-      await confirmationResult.confirm(otp);
+      // Verify OTP with Firebase
+      const result = await authService.verifyOTP(otpValue);
       
-      // Save biometric preference
-      localStorage.setItem('biometricEnabled', 'true');
-      localStorage.setItem('userPhone', phone);
-      setBiometricEnabled(true);
-      
-      alert('✅ Login successful!');
-      onLogin({ name: 'User', phone: `+91${phone}`, biometricEnabled: true });
-    } catch (error) {
-      console.error('Error verifying OTP:', error);
-      if (error.code === 'auth/invalid-verification-code') {
-        setOtpError('Invalid OTP. Please check and try again.');
-      } else if (error.code === 'auth/code-expired') {
-        setOtpError('OTP expired. Please request a new one.');
+      if (result.success) {
+        showToast('🎉 Login successful!', 'success');
+        setTimeout(() => {
+          onLogin({
+            name: result.user.displayName || 'User',
+            phone: phone,
+            uid: result.user.uid,
+            phoneNumber: result.user.phoneNumber
+          });
+        }, 500);
       } else {
-        setOtpError('Failed to verify OTP. Please try again.');
+        setErrors({ otp: result.message });
+        showToast(`❌ ${result.message}`, 'error');
+        setOtp(['', '', '', '', '', '']);
+        document.getElementById('otp-0')?.focus();
       }
+    } catch (error) {
+      showToast('❌ Verification failed. Please try again.', 'error');
+      setOtp(['', '', '', '', '', '']);
+      document.getElementById('otp-0')?.focus();
     } finally {
       setLoading(false);
     }
   };
 
-  const handleBiometricLogin = () => {
-    const savedPhone = localStorage.getItem('userPhone');
-    if (savedPhone) {
-      setTimeout(() => {
-        alert('✅ Biometric authentication successful!');
-        onLogin({ name: 'User', phone: `+91${savedPhone}`, biometricEnabled: true });
-      }, 500);
+  const handleResendOTP = async () => {
+    setLoading(true);
+    setOtp(['', '', '', '', '', '']);
+    
+    try {
+      const result = await authService.resendOTP(phone);
+      if (result.success) {
+        showToast('🔄 OTP resent successfully!', 'success');
+      } else {
+        showToast(`❌ ${result.message}`, 'error');
+      }
+    } catch (error) {
+      showToast('❌ Failed to resend OTP', 'error');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -165,7 +197,7 @@ const LoginScreen = ({ onLogin, language, onLanguageChange }) => {
       position: 'relative',
       overflow: 'hidden'
     }}>
-      {/* Animated Background Circles */}
+      {/* Background decorations */}
       <div style={{
         position: 'absolute',
         top: '-100px',
@@ -176,55 +208,25 @@ const LoginScreen = ({ onLogin, language, onLanguageChange }) => {
         background: 'rgba(255,255,255,0.1)',
         animation: 'float 6s ease-in-out infinite'
       }} />
-      <div style={{
-        position: 'absolute',
-        bottom: '-150px',
-        left: '-150px',
-        width: '400px',
-        height: '400px',
-        borderRadius: '50%',
-        background: 'rgba(255,255,255,0.1)',
-        animation: 'float 8s ease-in-out infinite reverse'
-      }} />
 
-      {/* Hidden reCAPTCHA container */}
+      {/* reCAPTCHA container (invisible) */}
       <div id="recaptcha-container"></div>
 
-      <AnimatedCard style={{ maxWidth: '420px', width: '100%', position: 'relative', zIndex: 1 }}>
-        {/* Language Selector */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '20px', gap: '8px' }}>
-          <button
-            onClick={() => onLanguageChange('en')}
-            style={{
-              padding: '8px 16px',
-              borderRadius: '12px',
-              border: '2px solid',
-              borderColor: language === 'en' ? colors.primary : '#E8E8E8',
-              background: language === 'en' ? colors.primary : 'white',
-              color: language === 'en' ? 'white' : colors.text,
-              cursor: 'pointer',
-              fontWeight: '600'
-            }}
-          >
-            English
-          </button>
-          <button
-            onClick={() => onLanguageChange('kn')}
-            style={{
-              padding: '8px 16px',
-              borderRadius: '12px',
-              border: '2px solid',
-              borderColor: language === 'kn' ? colors.primary : '#E8E8E8',
-              background: language === 'kn' ? colors.primary : 'white',
-              color: language === 'kn' ? 'white' : colors.text,
-              cursor: 'pointer',
-              fontWeight: '600'
-            }}
-          >
-            ಕನ್ನಡ
-          </button>
-        </div>
+      {/* Toast notification */}
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
+      {/* Main Card */}
+      <div style={{
+        background: colors.cardBg,
+        borderRadius: '24px',
+        padding: '40px',
+        maxWidth: '450px',
+        width: '100%',
+        position: 'relative',
+        zIndex: 1,
+        boxShadow: '0 20px 60px rgba(0,0,0,0.2)'
+      }}>
+        {/* Header */}
         <div style={{ textAlign: 'center', marginBottom: '40px' }}>
           <div style={{
             background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
@@ -251,65 +253,50 @@ const LoginScreen = ({ onLogin, language, onLanguageChange }) => {
         </div>
 
         {!otpSent ? (
+          /* Phone Number Entry */
           <div>
-            {/* Biometric Login Option */}
-            {biometricEnabled && (
-              <div style={{ marginBottom: '32px' }}>
-                <AnimatedCard 
-                  gradient="linear-gradient(135deg, #00b894 0%, #55efc4 100%)"
-                  onClick={handleBiometricLogin}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', padding: '8px' }}>
-                    <Fingerprint size={32} color="white" />
-                    <span style={{ fontSize: '20px', color: 'white', fontWeight: 'bold' }}>
-                      {t.useBiometric}
-                    </span>
-                  </div>
-                </AnimatedCard>
-                <div style={{ textAlign: 'center', margin: '20px 0', color: colors.textLight, fontSize: '16px', fontWeight: '600' }}>
-                  OR
-                </div>
-              </div>
-            )}
-
             <label style={{ fontSize: '18px', color: colors.text, display: 'block', marginBottom: '12px', fontWeight: '600' }}>
               {t.phoneLabel}
             </label>
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+            <div style={{ position: 'relative' }}>
               <div style={{
-                padding: '18px',
+                position: 'absolute',
+                left: '18px',
+                top: '50%',
+                transform: 'translateY(-50%)',
                 fontSize: '20px',
-                border: '2px solid #E8E8E8',
-                borderRadius: '16px',
-                background: '#F8F9FA',
-                fontWeight: 'bold',
-                color: colors.text
-              }}>
-                +91
-              </div>
+                color: colors.text,
+                fontWeight: '500'
+              }}>+91</div>
               <input
                 type="tel"
                 value={phone}
-                onChange={(e) => {
-                  const value = e.target.value.replace(/\D/g, '');
-                  setPhone(value);
-                  if (phoneError) setPhoneError('');
-                }}
-                placeholder={t.phonePlaceholder}
+                onChange={handlePhoneChange}
+                placeholder="9876543210"
                 maxLength="10"
                 style={{
-                  flex: 1,
-                  padding: '18px',
+                  width: '100%',
+                  padding: '18px 18px 18px 60px',
                   fontSize: '20px',
-                  border: `2px solid ${phoneError ? colors.danger : '#E8E8E8'}`,
+                  border: `2px solid ${errors.phone ? colors.danger : '#E8E8E8'}`,
                   borderRadius: '16px',
+                  marginBottom: '8px',
                   boxSizing: 'border-box',
                   outline: 'none'
                 }}
+                onFocus={(e) => !errors.phone && (e.target.style.borderColor = colors.primary)}
+                onBlur={(e) => !errors.phone && (e.target.style.borderColor = '#E8E8E8')}
               />
             </div>
-            {phoneError && <p style={{ color: colors.danger, fontSize: '14px', margin: '0 0 16px 0' }}>{phoneError}</p>}
-            
+            {errors.phone && (
+              <div style={{ color: colors.danger, fontSize: '14px', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <AlertCircle size={16} />
+                {errors.phone}
+              </div>
+            )}
+            <div style={{ fontSize: '13px', color: colors.textLight, marginBottom: '20px' }}>
+              💡 You will receive a 6-digit OTP via SMS
+            </div>
             <button
               onClick={handleSendOTP}
               disabled={loading}
@@ -323,45 +310,62 @@ const LoginScreen = ({ onLogin, language, onLanguageChange }) => {
                 borderRadius: '16px',
                 cursor: loading ? 'not-allowed' : 'pointer',
                 fontWeight: 'bold',
-                marginTop: phoneError ? '0' : '16px',
                 boxShadow: '0 10px 25px rgba(102, 126, 234, 0.4)'
               }}
             >
-              {loading ? 'Sending...' : t.sendOTP}
+              {loading ? '⏳ ' + t.loading + '...' : t.sendOTP}
             </button>
           </div>
         ) : (
+          /* OTP Entry */
           <div>
-            <label style={{ fontSize: '18px', color: colors.text, display: 'block', marginBottom: '12px', fontWeight: '600' }}>
-              {t.otpLabel}
-            </label>
-            <input
-              type="text"
-              value={otp}
-              onChange={(e) => {
-                const value = e.target.value.replace(/\D/g, '');
-                setOtp(value);
-                if (otpError) setOtpError('');
-              }}
-              placeholder={t.otpPlaceholder}
-              maxLength="6"
-              style={{
-                width: '100%',
-                padding: '18px',
-                fontSize: '24px',
-                border: `2px solid ${otpError ? colors.danger : '#E8E8E8'}`,
-                borderRadius: '16px',
-                marginBottom: '8px',
-                boxSizing: 'border-box',
-                letterSpacing: '8px',
-                textAlign: 'center',
-                outline: 'none'
-              }}
-            />
-            {otpError && <p style={{ color: colors.danger, fontSize: '14px', margin: '0 0 16px 0' }}>{otpError}</p>}
-            
+            <div style={{ marginBottom: '24px' }}>
+              <label style={{ fontSize: '18px', color: colors.text, display: 'block', marginBottom: '8px', fontWeight: '600' }}>
+                {t.otpLabel}
+              </label>
+              <p style={{ fontSize: '14px', color: colors.textLight, margin: 0 }}>
+                Code sent to +91-{phone}
+              </p>
+            </div>
+
+            {/* OTP Input Boxes */}
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', marginBottom: '12px' }}>
+              {otp.map((digit, index) => (
+                <input
+                  key={index}
+                  id={`otp-${index}`}
+                  type="text"
+                  value={digit}
+                  onChange={(e) => handleOtpChange(index, e.target.value)}
+                  onKeyDown={(e) => handleOtpKeyDown(index, e)}
+                  maxLength="1"
+                  style={{
+                    width: '56px',
+                    height: '56px',
+                    fontSize: '24px',
+                    fontWeight: 'bold',
+                    textAlign: 'center',
+                    border: `2px solid ${errors.otp ? colors.danger : digit ? colors.primary : '#E8E8E8'}`,
+                    borderRadius: '12px',
+                    outline: 'none',
+                    background: digit ? 'rgba(108, 92, 231, 0.05)' : 'white',
+                    transition: 'all 0.3s'
+                  }}
+                  onFocus={(e) => !errors.otp && (e.target.style.borderColor = colors.primary)}
+                  onBlur={(e) => !errors.otp && !digit && (e.target.style.borderColor = '#E8E8E8')}
+                />
+              ))}
+            </div>
+
+            {errors.otp && (
+              <div style={{ color: colors.danger, fontSize: '14px', marginBottom: '12px', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                <AlertCircle size={16} />
+                {errors.otp}
+              </div>
+            )}
+
             <button
-              onClick={handleVerifyOTP}
+              onClick={handleLogin}
               disabled={loading}
               style={{
                 width: '100%',
@@ -373,34 +377,53 @@ const LoginScreen = ({ onLogin, language, onLanguageChange }) => {
                 borderRadius: '16px',
                 cursor: loading ? 'not-allowed' : 'pointer',
                 fontWeight: 'bold',
-                marginTop: otpError ? '0' : '16px',
                 marginBottom: '12px',
                 boxShadow: '0 10px 25px rgba(0, 184, 148, 0.4)'
               }}
             >
-              {loading ? 'Verifying...' : t.login}
+              {loading ? '⏳ ' + t.loading + '...' : t.login}
             </button>
-            <button
-              onClick={() => {
-                setOtpSent(false);
-                setOtp('');
-                setOtpError('');
-              }}
-              style={{
-                width: '100%',
-                padding: '14px',
-                fontSize: '16px',
-                background: 'transparent',
-                color: colors.textLight,
-                border: 'none',
-                cursor: 'pointer'
-              }}
-            >
-              {t.changeNumber}
-            </button>
+
+            {/* Action Buttons */}
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button
+                onClick={() => { setOtpSent(false); setPhone(''); setOtp(['', '', '', '', '', '']); setErrors({}); }}
+                disabled={loading}
+                style={{
+                  flex: 1,
+                  padding: '14px',
+                  fontSize: '15px',
+                  background: 'transparent',
+                  color: colors.primary,
+                  border: `2px solid ${colors.primary}`,
+                  borderRadius: '12px',
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                  fontWeight: '600'
+                }}
+              >
+                {t.changeNumber}
+              </button>
+              <button
+                onClick={handleResendOTP}
+                disabled={loading}
+                style={{
+                  flex: 1,
+                  padding: '14px',
+                  fontSize: '15px',
+                  background: 'transparent',
+                  color: colors.secondary,
+                  border: `2px solid ${colors.secondary}`,
+                  borderRadius: '12px',
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                  fontWeight: '600'
+                }}
+              >
+                🔄 Resend OTP
+              </button>
+            </div>
           </div>
         )}
-      </AnimatedCard>
+      </div>
 
       <style>
         {`
