@@ -1470,6 +1470,8 @@ const SahaayaApp = () => {
 
   const handleBack = () => {
     setCurrentScreen('home');
+    // Ensure dashboard count reflects latest medications after returning
+    setMedicationCount(getMedications().length);
   };
 
   if (!isAuthenticated) {
